@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Licorera Donde Jefer | Licores Premium en Medellín</title>
+    <!-- Google Fonts: Syne & Outfit (Modern Luxury Typography) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar-wrapper">
+        <nav class="navbar glass-panel">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i data-lucide="flame"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>Donde Jefer</h1>
+                    <span>LICORERA & DESTILADOS</span>
+                </div>
+            </div>
+
+            <div class="search-bar glass-input-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="input-busqueda" placeholder="Buscar aguardiente, ron, whisky...">
+            </div>
+
+            <div class="nav-actions">
+                <!-- Botón Inventario (Solo visible / habilitado para Administrador) -->
+                <button class="btn-admin" id="btn-abrir-admin" style="display: none;" title="Panel de Administración">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <span>Inventario</span>
+                </button>
+
+                <!-- Carrito de Compras -->
+                <button class="cart-trigger" id="btn-abrir-carrito">
+                    <div class="cart-icon-wrapper">
+                        <i data-lucide="shopping-bag"></i>
+                        <span class="cart-badge" id="cart-counter">0</span>
+                    </div>
+                    <span class="cart-total-pill" id="cart-nav-total">$0</span>
+                </button>
+
+                <!-- Bloque de Usuario / Login -->
+                <div class="auth-box" id="auth-box">
+                    <button class="btn-login-trigger" id="btn-abrir-login">
+                        <i data-lucide="user"></i>
+                        <span>Iniciar Sesión</span>
+                    </button>
+                    <div class="user-pill glass-panel" id="user-pill" style="display: none;">
+                        <span class="user-role-badge" id="nav-user-role">👑 Admin</span>
+                        <span class="user-name-text" id="nav-user-name">Jefer</span>
+                        <button class="btn-logout" id="btn-logout" title="Cerrar sesión">
+                            <i data-lucide="log-out"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- ================= HERO SECTION ================= -->
+    <section class="hero-section">
+        <div class="hero-glow"></div>
+        <div class="hero-content">
+            <div class="hero-tag">
+                <i data-lucide="sparkles"></i>
+                <span>Domicilios 24/7 en todo Medellín & Valle de Aburrá</span>
+            </div>
+            <h2 class="hero-title">
+                El mejor licor a la puerta de tu casa, <span class="gradient-text">firme y bien helado.</span>
+            </h2>
+            <p class="hero-subtitle">
+                De la bodega de Jefer a tu mesa en tiempo récord. Aguardiente Antioqueño, rones añejos, whiskies de malta y cervezas al mejor precio.
+            </p>
+        </div>
+    </section>
+
+    <!-- ================= BARRA DE ESTADO DE SESIÓN ================= -->
+    <div class="session-banner-wrapper">
+        <div class="session-banner glass-panel" id="session-banner">
+            <div class="banner-info">
+                <i data-lucide="shield-check" class="banner-icon"></i>
+                <div>
+                    <strong id="session-banner-title">Modo Invitado (Solo Lectura)</strong>
+                    <p id="session-banner-desc">Inicia sesión como <strong>Vendedor</strong> para registrar ventas o como <strong>Administrador</strong> para gestionar licores.</p>
+                </div>
+            </div>
+            <button class="btn-pill-small" id="banner-action-btn">
+                Iniciar Sesión
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= CATEGORY PILLS ================= -->
+    <section class="categories-container">
+        <div class="category-pills" id="category-pills">
+            <button class="pill active" data-categoria="Todos">
+                <i data-lucide="sparkles"></i> Todos
+            </button>
+            <button class="pill" data-categoria="Aguardiente">
+                <i data-lucide="zap"></i> Aguardiente
+            </button>
+            <button class="pill" data-categoria="Ron">
+                <i data-lucide="flame"></i> Ron
+            </button>
+            <button class="pill" data-categoria="Whisky">
+                <i data-lucide="gem"></i> Whisky
+            </button>
+            <button class="pill" data-categoria="Cervezas">
+                <i data-lucide="beer"></i> Cervezas
+            </button>
+            <button class="pill" data-categoria="Tequila">
+                <i data-lucide="glass-water"></i> Tequila
+            </button>
+        </div>
+    </section>
+
+    <!-- ================= PRODUCT CATALOG ================= -->
+    <main class="main-catalog">
+        <div class="catalog-header">
+            <div class="catalog-title-group">
+                <h3 id="current-category-title">Catálogo Completo</h3>
+                <p id="products-count">Cargando licores disponibles...</p>
+            </div>
+            <div class="catalog-badge-status" id="backend-status-pill">
+                <span class="status-dot"></span>
+                <span id="backend-status-text">Conectando API...</span>
+            </div>
+        </div>
+
+        <div class="products-grid" id="products-grid">
+            <!-- Las tarjetas de productos se inyectan dinámicamente con JavaScript -->
+        </div>
+    </main>
+
+    <!-- ================= SLIDE-OVER CARRITO DE COMPRAS ================= -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <aside class="cart-drawer glass-panel" id="cart-drawer">
+        <div class="drawer-header">
+            <div class="drawer-title">
+                <i data-lucide="shopping-bag"></i>
+                <h3>Tu Pedido</h3>
+            </div>
+            <button class="btn-close" id="btn-cerrar-carrito">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+
+        <div class="cart-items" id="cart-items-container">
+            <!-- Items del carrito generados con JS -->
+        </div>
+
+        <div class="drawer-footer">
+            <div class="cart-summary">
+                <div class="summary-row">
+                    <span>Subtotal</span>
+                    <span id="summary-subtotal">$0</span>
+                </div>
+                <div class="summary-row">
+                    <span>Domicilio (Medellín)</span>
+                    <span class="text-free">GRATIS</span>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="summary-row total-row">
+                    <span>Total a Pagar</span>
+                    <span id="summary-total">$0</span>
+                </div>
+            </div>
+
+            <button class="btn-checkout" id="btn-iniciar-checkout">
+                <span>Proceder al Pago</span>
+                <i data-lucide="arrow-right"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- ================= MODAL DE LOGIN (AUTENTICACIÓN RBAC) ================= -->
+    <div class="modal-overlay" id="login-modal">
+        <div class="modal-card glass-panel">
+            <div class="modal-header">
+                <div>
+                    <h3>Iniciar Sesión en el Sistema</h3>
+                    <p class="modal-subtitle">Control de Acceso según Roles</p>
+                </div>
+                <button class="btn-close" id="btn-cerrar-login">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <!-- Accesos rápidos para Bastian -->
+            <div class="quick-login-box">
+                <p class="quick-title">⚡ Prueba rápida con un clic:</p>
+                <div class="quick-buttons">
+                    <button type="button" class="btn-quick-user admin" onclick="autocompletarLogin('jefer', 'admin123')">
+                        👑 Jefer (Administrador)
+                    </button>
+                    <button type="button" class="btn-quick-user vendedor" onclick="autocompletarLogin('vendedor', 'vendedor123')">
+                        👤 Carlos (Vendedor)
+                    </button>
+                </div>
+            </div>
+
+            <form id="form-login">
+                <div class="form-group">
+                    <label>Usuario</label>
+                    <input type="text" id="login-username" required placeholder="jefer o vendedor">
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="login-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; margin-top: 10px;">
+                    <i data-lucide="log-in"></i> Entrar al Sistema
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL DE CHECKOUT (FACTURACIÓN) ================= -->
+    <div class="modal-overlay" id="checkout-modal">
+        <div class="modal-card glass-panel">
+            <div class="modal-header">
+                <h3>Finalizar Venta / Despacho</h3>
+                <button class="btn-close" id="btn-cerrar-modal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="vendedor-auth-indicator" id="checkout-vendedor-pill">
+                <i data-lucide="check-circle-2"></i>
+                <span>Venta registrada por: <strong id="checkout-user-badge">Invitado</strong></span>
+            </div>
+            <form id="form-checkout">
+                <div class="form-group">
+                    <label>Nombre del Cliente</label>
+                    <input type="text" id="checkout-nombre" required placeholder="Ej: Bastian García">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono / WhatsApp</label>
+                    <input type="tel" id="checkout-telefono" required placeholder="Ej: 300 123 4567">
+                </div>
+                <div class="form-group">
+                    <label>Dirección de Entrega</label>
+                    <input type="text" id="checkout-direccion" required placeholder="Ej: Calle 10 # 40-20, El Poblado">
+                </div>
+                <div class="checkout-breakdown">
+                    <p>Total a facturar y descontar del inventario:</p>
+                    <strong id="modal-total-display">$0 COP</strong>
+                </div>
+                <button type="submit" class="btn-submit-order" id="btn-enviar-pedido">
+                    <i data-lucide="check-circle-2"></i>
+                    <span>Confirmar Venta y Restar Stock (POST)</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL ADMIN / GESTOR DE PRODUCTOS (SOLO ADMIN) ================= -->
+    <div class="modal-overlay" id="admin-modal">
+        <div class="modal-card glass-panel modal-lg">
+            <div class="modal-header">
+                <div>
+                    <h3>Gestión de Inventario (Exclusivo Administrador)</h3>
+                    <p class="modal-subtitle">Permite agregar nuevas referencias, cambiar precios y eliminar licores</p>
+                </div>
+                <button class="btn-close" id="btn-cerrar-admin">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <div class="admin-grid">
+                <!-- Formulario Agregar/Actualizar -->
+                <div class="admin-form-col">
+                    <h4 id="admin-form-title">Agregar Nuevo Licor (POST)</h4>
+                    <form id="form-admin-producto">
+                        <input type="hidden" id="admin-prod-id">
+                        <div class="form-group">
+                            <label>Nombre del Licor</label>
+                            <input type="text" id="admin-nombre" required placeholder="Ej: Aguardiente Amarillo de Manzanares">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Categoría</label>
+                                <select id="admin-categoria">
+                                    <option value="Aguardiente">Aguardiente</option>
+                                    <option value="Ron">Ron</option>
+                                    <option value="Whisky">Whisky</option>
+                                    <option value="Cervezas">Cervezas</option>
+                                    <option value="Tequila">Tequila</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Precio ($ COP)</label>
+                                <input type="number" id="admin-precio" required min="1000" placeholder="50000">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Stock (Botellas)</label>
+                                <input type="number" id="admin-stock" required min="0" placeholder="15">
+                            </div>
+                            <div class="form-group">
+                                <label>Grado Alcohol (%)</label>
+                                <input type="number" step="0.1" id="admin-grado" placeholder="24.0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>URL de Imagen</label>
+                            <input type="url" id="admin-imagen" placeholder="https://images.unsplash.com/...">
+                        </div>
+                        <div class="form-group">
+                            <label>Descripción</label>
+                            <textarea id="admin-descripcion" rows="2" placeholder="Detalles de sabor y presentación..."></textarea>
+                        </div>
+                        <div class="admin-form-buttons">
+                            <button type="submit" class="btn-primary" id="btn-guardar-admin">
+                                <i data-lucide="save"></i> Guardar Licor
+                            </button>
+                            <button type="button" class="btn-secondary" id="btn-cancelar-admin" style="display: none;">
+                                Cancelar Edición
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Lista de productos en inventario con acciones -->
+                <div class="admin-table-col">
+                    <h4>Inventario Actual en Bodega</h4>
+                    <div class="admin-items-list" id="admin-items-list">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= CONTENEDOR DE TOASTS (ALERTAS) ================= -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

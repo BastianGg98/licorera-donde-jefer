@@ -1,0 +1,12 @@
+# Entornos virtuales y cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.env.local
+.venv
+env/
+venv/
+
+# Vercel
+.vercel
