@@ -1,10 +1,8 @@
 // ==============================================================
 // LICORERA DONDE JEFER - CONTROLADOR JAVASCRIPT (FRONTEND)
 // ==============================================================
-// Incluye Sistema de Roles (RBAC):
-// 1. Invitado: Navega y ve la vitrina.
-// 2. Vendedor (Carlos): Despacha pedidos (resta inventario automáticamente).
-// 3. Administrador (Jefer): Despacha pedidos + Administra inventario (CRUD).
+// 100% CONECTADO A SUPABASE A TRAVÉS DE LA API EN PYTHON
+// Cero datos de prueba quemados: todo se lee y escribe en la nube.
 // ==============================================================
 
 // Estado global de la aplicación
@@ -28,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // --------------------------------------------------------------
-// 2. SISTEMA DE AUTENTICACIÓN Y ROLES (RBAC)
+// 2. SISTEMA DE AUTENTICACIÓN (Valida contra Supabase)
 // --------------------------------------------------------------
 async function iniciarSesion(username, password) {
     try {
@@ -40,23 +38,22 @@ async function iniciarSesion(username, password) {
 
         const data = await resp.json();
         if (!resp.ok) {
-            mostrarToast(data.error || "Credenciales incorrectas", "warning");
+            mostrarToast(data.detail || data.error || "Credenciales incorrectas", "warning");
             return;
         }
 
         usuarioActual = data.usuario;
         localStorage.setItem("jefer_usuario", JSON.stringify(usuarioActual));
 
-        // Cerrar modal de login
         document.getElementById("login-modal").classList.remove("active");
         document.getElementById("form-login").reset();
 
         aplicarEstadoAutenticacionUI();
-        mostrarToast(`¡Bienvenido ${usuarioActual.nombre}! Sesión iniciada con éxito.`, "success");
+        mostrarToast(`¡Bienvenido ${usuarioActual.nombre}! Sesión verificada en Supabase.`, "success");
 
     } catch (e) {
         console.error("Error en login:", e);
-        mostrarToast("No se pudo conectar con el servicio de autenticación", "warning");
+        mostrarToast("Fallo de conexión con el servidor de autenticación", "warning");
     }
 }
 
@@ -79,14 +76,12 @@ function aplicarEstadoAutenticacionUI() {
     const navUserRole = document.getElementById("nav-user-role");
     const navUserName = document.getElementById("nav-user-name");
     const btnAdmin = document.getElementById("btn-abrir-admin");
-    const banner = document.getElementById("session-banner");
     const bannerTitle = document.getElementById("session-banner-title");
     const bannerDesc = document.getElementById("session-banner-desc");
     const bannerBtn = document.getElementById("banner-action-btn");
     const checkoutBadge = document.getElementById("checkout-user-badge");
 
     if (usuarioActual) {
-        // Usuario logueado
         btnLoginTrigger.style.display = "none";
         userPill.style.display = "flex";
         navUserName.textContent = usuarioActual.nombre.split(" ")[0];
@@ -94,9 +89,9 @@ function aplicarEstadoAutenticacionUI() {
         if (usuarioActual.rol === "administrador") {
             navUserRole.className = "user-role-badge admin";
             navUserRole.textContent = "👑 Administrador";
-            btnAdmin.style.display = "flex"; // Administrador PUEDE ver inventario
+            btnAdmin.style.display = "flex";
             bannerTitle.textContent = "Sesión Activa: Administrador (Jefer)";
-            bannerDesc.textContent = "Tienes control total: gestionar catálogo, crear/borrar licores y despachar ventas.";
+            bannerDesc.textContent = "Tienes control total: gestionar catálogo en Supabase, crear/borrar licores y despachar ventas.";
             bannerBtn.textContent = "Gestionar Inventario";
             bannerBtn.onclick = () => {
                 renderizarAdminLista();
@@ -105,9 +100,9 @@ function aplicarEstadoAutenticacionUI() {
         } else {
             navUserRole.className = "user-role-badge vendedor";
             navUserRole.textContent = "👤 Vendedor";
-            btnAdmin.style.display = "none"; // Vendedor NO PUEDE ver administración de inventario
+            btnAdmin.style.display = "none";
             bannerTitle.textContent = "Sesión Activa: Vendedor (Carlos)";
-            bannerDesc.textContent = "Puedes adicionar ventas y despachar pedidos. El stock se descontará automáticamente.";
+            bannerDesc.textContent = "Puedes adicionar ventas y despachar pedidos. El stock se descuenta en Supabase.";
             bannerBtn.textContent = "Ver Pedido Actual";
             bannerBtn.onclick = () => {
                 document.getElementById("cart-drawer").classList.add("active");
@@ -120,7 +115,6 @@ function aplicarEstadoAutenticacionUI() {
         }
 
     } else {
-        // Modo Invitado (Sin autenticar)
         btnLoginTrigger.style.display = "flex";
         userPill.style.display = "none";
         btnAdmin.style.display = "none";
@@ -139,7 +133,7 @@ function aplicarEstadoAutenticacionUI() {
 }
 
 // --------------------------------------------------------------
-// 3. CARGAR PRODUCTOS: MÉTODO GET
+// 3. CARGAR PRODUCTOS: 100% DESDE SUPABASE
 // --------------------------------------------------------------
 async function cargarProductosDesdeAPI() {
     const grid = document.getElementById("products-grid");
@@ -147,7 +141,7 @@ async function cargarProductosDesdeAPI() {
 
     grid.innerHTML = `
         <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-dim);">
-            <p>Sirviendo los licores desde la bodega...</p>
+            <p>Consultando la bodega en Supabase...</p>
         </div>
     `;
 
@@ -160,17 +154,27 @@ async function cargarProductosDesdeAPI() {
         if (params.toString()) url += `?${params.toString()}`;
 
         const respuesta = await fetch(url);
-        if (!respuesta.ok) throw new Error("No se pudo conectar a la API");
+        if (!respuesta.ok) throw new Error("No se pudo conectar a Supabase");
 
         const resultado = await respuesta.json();
         productos = resultado.data || [];
 
         renderizarProductos(productos);
-        countLabel.textContent = `${productos.length} licores listos para entrega`;
+        countLabel.textContent = `${productos.length} licores en bodega (Supabase)`;
 
     } catch (error) {
-        console.warn("[Aviso]: Usando catálogo local:", error);
-        usarCatalogoDemoLocal();
+        console.error("[Error]: Fallo de conexión con la base de datos:", error);
+        grid.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--accent-red);">
+                <i data-lucide="alert-octagon" style="width: 48px; height: 48px; margin-bottom: 12px;"></i>
+                <h4>Error de conexión con la base de datos</h4>
+                <p style="font-size: 0.9rem; margin-top: 6px; color: var(--text-muted);">
+                    No se pudieron cargar los licores desde Supabase. Verifica tu conexión o el estado del servidor.
+                </p>
+            </div>
+        `;
+        countLabel.textContent = "Error al conectar con Supabase";
+        if (window.lucide) lucide.createIcons();
     }
 }
 
@@ -185,8 +189,8 @@ function renderizarProductos(lista) {
         grid.innerHTML = `
             <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text-dim);">
                 <i data-lucide="glass-water" style="width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5;"></i>
-                <h4>No encontramos ese licor, parcero</h4>
-                <p style="font-size: 0.9rem; margin-top: 6px;">Prueba buscando otra categoría o nombre.</p>
+                <h4>No hay licores en esta categoría</h4>
+                <p style="font-size: 0.9rem; margin-top: 6px;">Prueba buscando otra categoría o agrega una nueva desde el panel.</p>
             </div>
         `;
         if (window.lucide) lucide.createIcons();
@@ -256,7 +260,7 @@ function agregarAlCarrito(productoId) {
             itemExistente.cantidad++;
             mostrarToast(`Agregaste otra unidad de ${licor.nombre}`, "success");
         } else {
-            mostrarToast(`Stock máximo disponible alcanzado (${licor.stock})`, "warning");
+            mostrarToast(`Stock máximo disponible en Supabase (${licor.stock})`, "warning");
         }
     } else {
         carrito.push({
@@ -352,7 +356,7 @@ function actualizarCarritoUI() {
 }
 
 // --------------------------------------------------------------
-// 6. REGISTRAR VENTA: MÉTODO POST CON DESCUENTO DE STOCK
+// 6. REGISTRAR VENTA: RESTA DIRECTAMENTE EN SUPABASE
 // --------------------------------------------------------------
 async function despacharPedido(nombre, telefono, direccion) {
     if (!usuarioActual) {
@@ -396,28 +400,25 @@ async function despacharPedido(nombre, telefono, direccion) {
 
         const data = await resp.json();
         if (!resp.ok) {
-            mostrarToast(data.error || "No se pudo registrar la venta", "warning");
+            mostrarToast(data.detail || data.error || "No se pudo registrar la venta en Supabase", "warning");
             return;
         }
 
-        // Éxito: Limpiar carrito
         carrito = [];
         guardarCarrito();
         actualizarCarritoUI();
 
-        // Cerrar modales
         document.getElementById("checkout-modal").classList.remove("active");
         document.getElementById("cart-drawer").classList.remove("active");
         document.getElementById("drawer-overlay").classList.remove("active");
 
-        mostrarToast(`¡Venta registrada con éxito por ${usuarioActual.nombre}! Stock actualizado en bodega. 📦📉`, "success");
+        mostrarToast(`¡Venta registrada con éxito por ${usuarioActual.nombre}! Stock actualizado en Supabase. 📦📉`, "success");
 
-        // Recargar productos para ver el stock reducido en pantalla
         await cargarProductosDesdeAPI();
 
     } catch (e) {
         console.error("Error al registrar venta:", e);
-        mostrarToast("Error enviando la venta", "warning");
+        mostrarToast("Error de conexión al enviar el pedido", "warning");
     }
 }
 
@@ -448,8 +449,7 @@ async function guardarProductoAdmin(e) {
         stock,
         grado_alcohol: grado,
         imagen_url: imagen,
-        descripcion,
-        rol_solicitante: "administrador"
+        descripcion
     };
 
     try {
@@ -463,7 +463,7 @@ async function guardarProductoAdmin(e) {
                 },
                 body: JSON.stringify(datos)
             });
-            mostrarToast("Licor actualizado con éxito en inventario (PUT) 🔄", "success");
+            mostrarToast("Licor actualizado con éxito en Supabase (PUT) 🔄", "success");
         } else {
             resp = await fetch(`${API_BASE}/products`, {
                 method: "POST",
@@ -473,12 +473,12 @@ async function guardarProductoAdmin(e) {
                 },
                 body: JSON.stringify(datos)
             });
-            mostrarToast("Nueva referencia agregada a la bodega (POST) ✨", "success");
+            mostrarToast("Nueva referencia guardada en Supabase (POST) ✨", "success");
         }
 
         const data = await resp.json();
         if (!resp.ok) {
-            mostrarToast(data.error || "Error al guardar el licor", "warning");
+            mostrarToast(data.detail || data.error || "Error al guardar el licor", "warning");
             return;
         }
 
@@ -502,7 +502,7 @@ async function eliminarProductoAdmin(id) {
         return;
     }
 
-    if (!confirm("¿Seguro que deseas eliminar definitivamente este licor de la bodega?")) return;
+    if (!confirm("¿Seguro que deseas eliminar definitivamente este licor de Supabase?")) return;
 
     try {
         const resp = await fetch(`${API_BASE}/products/${id}`, {
@@ -514,11 +514,11 @@ async function eliminarProductoAdmin(id) {
 
         const data = await resp.json();
         if (resp.ok) {
-            mostrarToast("Referencia eliminada de la bodega (DELETE) 🗑️", "info");
+            mostrarToast("Referencia eliminada de Supabase (DELETE) 🗑️", "info");
             await cargarProductosDesdeAPI();
             renderizarAdminLista();
         } else {
-            mostrarToast(data.error || "No se pudo eliminar", "warning");
+            mostrarToast(data.detail || data.error || "No se pudo eliminar", "warning");
         }
     } catch (err) {
         console.error("Error al eliminar:", err);
@@ -574,7 +574,6 @@ function renderizarAdminLista() {
 // 8. EVENTOS DE INTERFAZ
 // --------------------------------------------------------------
 function configurarEventosUI() {
-    // Filtros de categoría
     const pills = document.querySelectorAll(".category-pills .pill");
     pills.forEach(pill => {
         pill.addEventListener("click", () => {
@@ -587,7 +586,6 @@ function configurarEventosUI() {
         });
     });
 
-    // Buscador
     let timeoutBusqueda;
     const inputBusqueda = document.getElementById("input-busqueda");
     inputBusqueda.addEventListener("input", (e) => {
@@ -598,7 +596,6 @@ function configurarEventosUI() {
         }, 300);
     });
 
-    // Abrir/Cerrar Carrito
     const drawer = document.getElementById("cart-drawer");
     const overlay = document.getElementById("drawer-overlay");
     const btnAbrirCarrito = document.getElementById("btn-abrir-carrito");
@@ -617,7 +614,6 @@ function configurarEventosUI() {
     btnCerrarCarrito.addEventListener("click", cerrarCarrito);
     overlay.addEventListener("click", cerrarCarrito);
 
-    // Modal Login
     const loginModal = document.getElementById("login-modal");
     document.getElementById("btn-abrir-login").addEventListener("click", () => {
         loginModal.classList.add("active");
@@ -633,7 +629,6 @@ function configurarEventosUI() {
     });
     document.getElementById("btn-logout").addEventListener("click", cerrarSesion);
 
-    // Modal Checkout
     const checkoutModal = document.getElementById("checkout-modal");
     const btnIniciarCheckout = document.getElementById("btn-iniciar-checkout");
     const btnCerrarModal = document.getElementById("btn-cerrar-modal");
@@ -664,7 +659,6 @@ function configurarEventosUI() {
         despacharPedido(nom, tel, dir);
     });
 
-    // Modal Admin
     const adminModal = document.getElementById("admin-modal");
     document.getElementById("btn-abrir-admin").addEventListener("click", () => {
         if (!usuarioActual || usuarioActual.rol !== "administrador") {
@@ -721,35 +715,11 @@ async function verificarEstadoBackend() {
     try {
         const res = await fetch(`${API_BASE}/health`);
         if (res.ok) {
-            statusText.textContent = "Servicio con Control de Roles • Activo";
+            statusText.textContent = "100% Conectado a Supabase";
         } else {
-            statusText.textContent = "Modo Demostración";
+            statusText.textContent = "Conexión Inestable";
         }
     } catch {
-        statusText.textContent = "Catálogo Offline";
+        statusText.textContent = "Base de Datos Offline";
     }
-}
-
-// Catálogo demo de reserva
-function usarCatalogoDemoLocal() {
-    productos = [
-        { id: 1, nombre: "Aguardiente Antioqueño Tapa Azul (Sin Azúcar)", categoria: "Aguardiente", precio: 48000, stock: 35, imagen_url: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500", descripcion: "El clásico paisa sin azúcar, suave al paladar.", grado_alcohol: 29.0, volumen: "750 ml" },
-        { id: 2, nombre: "Aguardiente Antioqueño Tapa Roja (Tradicional)", categoria: "Aguardiente", precio: 46000, stock: 28, imagen_url: "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500", descripcion: "El tradicional anisado paisa con cuerpo.", grado_alcohol: 29.0, volumen: "750 ml" },
-        { id: 3, nombre: "Ron Medellín Extra Añejo 8 Años", categoria: "Ron", precio: 78000, stock: 20, imagen_url: "https://images.unsplash.com/photo-1608885823108-25b4458d9297?w=500", descripcion: "Madurado pacientemente en roble americano.", grado_alcohol: 35.0, volumen: "750 ml" },
-        { id: 4, nombre: "Whisky Buchanan's DeLuxe 12 Años", categoria: "Whisky", precio: 145000, stock: 25, imagen_url: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500", descripcion: "Blended Scotch Whisky suave y frutal.", grado_alcohol: 40.0, volumen: "750 ml" },
-        { id: 5, nombre: "Whisky Old Parr 12 Años", categoria: "Whisky", precio: 155000, stock: 18, imagen_url: "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500", descripcion: "La legendaria botella craquelada.", grado_alcohol: 40.0, volumen: "750 ml" },
-        { id: 6, nombre: "Six Pack Cerveza Club Colombia Dorada", categoria: "Cervezas", precio: 28000, stock: 50, imagen_url: "https://images.unsplash.com/photo-1608270546114-1f6305a2e584?w=500", descripcion: "Cerveza tipo lager dorada y lupulada.", grado_alcohol: 4.7, volumen: "Six Pack 330ml" },
-        { id: 7, nombre: "Six Pack Cerveza Corona Extra", categoria: "Cervezas", precio: 36000, stock: 40, imagen_url: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500", descripcion: "Cerveza clara mexicana para tomar helada.", grado_alcohol: 4.5, volumen: "Six Pack 355ml" },
-        { id: 8, nombre: "Tequila Don Julio Blanco", categoria: "Tequila", precio: 260000, stock: 12, imagen_url: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500", descripcion: "100% Agave Azul limpio y suave.", grado_alcohol: 38.0, volumen: "750 ml" }
-    ];
-
-    let filtrados = productos;
-    if (categoriaActiva !== "Todos") {
-        filtrados = filtrados.filter(p => p.categoria.toLowerCase() === categoriaActiva.toLowerCase());
-    }
-    if (terminoBusqueda.trim()) {
-        filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(terminoBusqueda.toLowerCase()));
-    }
-    renderizarProductos(filtrados);
-    document.getElementById("products-count").textContent = `${filtrados.length} licores listos para entrega (Catálogo Demo)`;
 }

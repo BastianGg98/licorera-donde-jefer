@@ -1,9 +1,9 @@
 # ==============================================================
-# API REST EN PYTHON - LICORERA DONDE JEFER (CON CONTROL DE ROLES)
+# API REST EN PYTHON - LICORERA DONDE JEFER (100% SUPABASE)
 # ==============================================================
-# Sistema de Autorización Basado en Roles (RBAC):
-# 1. Administrador (Jefer): Vender + Crear/Editar/Eliminar licores.
-# 2. Vendedor (Carlos): Solo vender (registra pedido y descuenta stock).
+# CERO DATOS QUEMADOS EN MEMORIA:
+# Todas las consultas, autenticación, ventas y modificaciones
+# se ejecutan en tiempo real contra la base de datos de Supabase.
 # ==============================================================
 
 import os
@@ -17,8 +17,8 @@ import urllib.error
 
 app = FastAPI(
     title="API Licorera Donde Jefer",
-    description="Servicios backend con autenticación y control de inventario",
-    version="2.0.0"
+    description="Servicios backend conectados directamente a Supabase",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -29,6 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cargar credenciales desde variables de entorno
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "") or os.environ.get("SUPABASE_ANON_KEY", "")
 
@@ -72,28 +73,14 @@ class PedidoCreate(BaseModel):
     items: List[ItemPedido]
     total: float
 
-# Usuarios en memoria
-USUARIOS_DB = {
-    "jefer": {"password": "admin123", "nombre": "Jefer (Administrador)", "rol": "administrador"},
-    "vendedor": {"password": "vendedor123", "nombre": "Carlos (Vendedor)", "rol": "vendedor"}
-}
-
-PRODUCTOS_DEMO = [
-    {"id": 1, "nombre": "Aguardiente Antioqueño Tapa Azul (Sin Azúcar)", "categoria": "Aguardiente", "precio": 48000.0, "stock": 35, "imagen_url": "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500", "descripcion": "El clásico paisa sin azúcar, suave al paladar.", "grado_alcohol": 29.0, "volumen": "750 ml"},
-    {"id": 2, "nombre": "Aguardiente Antioqueño Tapa Roja (Tradicional)", "categoria": "Aguardiente", "precio": 46000.0, "stock": 28, "imagen_url": "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500", "descripcion": "El tradicional anisado paisa con cuerpo.", "grado_alcohol": 29.0, "volumen": "750 ml"},
-    {"id": 3, "nombre": "Ron Medellín Extra Añejo 8 Años", "categoria": "Ron", "precio": 78000.0, "stock": 20, "imagen_url": "https://images.unsplash.com/photo-1608885823108-25b4458d9297?w=500", "descripcion": "Madurado pacientemente en roble americano.", "grado_alcohol": 35.0, "volumen": "750 ml"},
-    {"id": 4, "nombre": "Whisky Buchanan's DeLuxe 12 Años", "categoria": "Whisky", "precio": 145000.0, "stock": 25, "imagen_url": "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500", "descripcion": "Blended Scotch Whisky suave y frutal.", "grado_alcohol": 40.0, "volumen": "750 ml"},
-    {"id": 5, "nombre": "Whisky Old Parr 12 Años", "categoria": "Whisky", "precio": 155000.0, "stock": 18, "imagen_url": "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500", "descripcion": "La legendaria botella craquelada.", "grado_alcohol": 40.0, "volumen": "750 ml"},
-    {"id": 6, "nombre": "Six Pack Cerveza Club Colombia Dorada", "categoria": "Cervezas", "precio": 28000.0, "stock": 50, "imagen_url": "https://images.unsplash.com/photo-1608270546114-1f6305a2e584?w=500", "descripcion": "Cerveza tipo lager dorada y lupulada.", "grado_alcohol": 4.7, "volumen": "Six Pack 330ml"},
-    {"id": 7, "nombre": "Six Pack Cerveza Corona Extra", "categoria": "Cervezas", "precio": 36000.0, "stock": 40, "imagen_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500", "descripcion": "Cerveza clara mexicana para tomar helada.", "grado_alcohol": 4.5, "volumen": "Six Pack 355ml"},
-    {"id": 8, "nombre": "Tequila Don Julio Blanco", "categoria": "Tequila", "precio": 260000.0, "stock": 12, "imagen_url": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500", "descripcion": "100% Agave Azul limpio y suave.", "grado_alcohol": 38.0, "volumen": "750 ml"}
-]
-
-PEDIDOS_DEMO = []
-
-def supabase_request(endpoint: str, method: str = "GET", data: dict = None, headers_extra: dict = None):
+# --------------------------------------------------------------
+# COMUNICACIÓN EXCLUSIVA CON SUPABASE (POSTGREST)
+# --------------------------------------------------------------
+def supabase_db(endpoint: str, method: str = "GET", data: dict = None, headers_extra: dict = None):
+    """Ejecuta operaciones contra la base de datos de Supabase."""
     if not SUPABASE_URL or not SUPABASE_KEY:
-        return None
+        raise HTTPException(status_code=500, detail="Credenciales de Supabase no configuradas en el servidor")
+
     url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
     headers = {
         "apikey": SUPABASE_KEY,
@@ -103,108 +90,181 @@ def supabase_request(endpoint: str, method: str = "GET", data: dict = None, head
     }
     if headers_extra:
         headers.update(headers_extra)
+
     req_data = json.dumps(data).encode("utf-8") if data is not None else None
     req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
+
     try:
         with urllib.request.urlopen(req) as resp:
             body = resp.read().decode("utf-8")
-            return json.loads(body) if body else {}
+            return json.loads(body) if body else []
+    except urllib.error.HTTPError as e:
+        error_msg = e.read().decode("utf-8")
+        print(f"[Error Supabase {e.code}]: {error_msg}")
+        raise HTTPException(status_code=e.code, detail=f"Error en Supabase: {error_msg}")
     except Exception as e:
-        print(f"[Supabase Error]: {e}")
-        return None
+        print(f"[Error Conexión Supabase]: {e}")
+        raise HTTPException(status_code=500, detail=f"Fallo de conexión con Supabase: {str(e)}")
 
-# ----------------- LOGIN ENDPOINT -----------------
+# --------------------------------------------------------------
+# ENDPOINTS 100% BASE DE DATOS
+# --------------------------------------------------------------
+
+@app.get("/api/health")
+def estado_salud():
+    """Verifica que el servicio esté conectado a Supabase."""
+    return {
+        "status": "online",
+        "negocio": "Licorera Donde Jefer",
+        "datos_en_memoria": "ELIMINADOS - 100% Supabase",
+        "supabase_url": SUPABASE_URL
+    }
+
+# ----------------- LOGIN (Valida en tabla 'usuarios') -----------------
 @app.post("/api/auth/login")
 def login(cred: LoginRequest):
-    """Valida usuario y contraseña y devuelve el rol asignado."""
+    """Valida usuario y contraseña directamente en la tabla usuarios de Supabase."""
     u = cred.username.strip().lower()
-    if u in USUARIOS_DB and USUARIOS_DB[u]["password"] == cred.password:
-        return {
-            "mensaje": f"Bienvenido {USUARIOS_DB[u]['nombre']}",
-            "usuario": {
-                "username": u,
-                "nombre": USUARIOS_DB[u]["nombre"],
-                "rol": USUARIOS_DB[u]["rol"]
-            }
-        }
-    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    p = cred.password.strip()
 
-# ----------------- PRODUCTOS (GET: Público) -----------------
+    # Consulta en Supabase
+    resultado = supabase_db(f"usuarios?username=eq.{u}&password_hash=eq.{p}&select=id,username,nombre_completo,rol,activo", method="GET")
+    if not resultado:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+
+    usuario = resultado[0]
+    if not usuario.get("activo", True):
+        raise HTTPException(status_code=403, detail="Este usuario se encuentra inactivo")
+
+    return {
+        "mensaje": f"Bienvenido a la barra, {usuario['nombre_completo']}!",
+        "usuario": {
+            "username": usuario["username"],
+            "nombre": usuario["nombre_completo"],
+            "rol": usuario["rol"]
+        }
+    }
+
+# ----------------- PRODUCTOS (GET: Consulta en tabla 'productos') -----------------
 @app.get("/api/products")
 def obtener_productos(categoria: Optional[str] = None, q: Optional[str] = None):
-    res = PRODUCTOS_DEMO
+    """Consulta los licores directamente de la base de datos de Supabase."""
+    query_params = ["order=id.asc"]
     if categoria and categoria.lower() != "todos":
-        res = [p for p in res if p["categoria"].lower() == categoria.lower()]
+        query_params.append(f"categoria=eq.{categoria}")
     if q:
-        res = [p for p in res if q.lower() in p["nombre"].lower()]
-    return {"origen": "python_api", "data": res}
+        query_params.append(f"nombre=ilike.*{q}*")
 
-# ----------------- REGISTRAR VENTA (POST: Vendedor o Admin) -----------------
+    endpoint = "productos?select=*"
+    if query_params:
+        endpoint += "&" + "&".join(query_params)
+
+    productos = supabase_db(endpoint, method="GET")
+    return {"origen": "supabase_database", "data": productos}
+
+@app.get("/api/products/{producto_id}")
+def obtener_producto_por_id(producto_id: int):
+    """Busca un licor por ID en Supabase."""
+    resultado = supabase_db(f"productos?id=eq.{producto_id}&select=*", method="GET")
+    if not resultado:
+        raise HTTPException(status_code=404, detail="Licor no encontrado en Supabase")
+    return resultado[0]
+
+# ----------------- REGISTRAR VENTA (POST: Resta stock en Supabase) -----------------
 @app.post("/api/orders", status_code=status.HTTP_201_CREATED)
 def registrar_pedido(pedido: PedidoCreate, x_user_role: Optional[str] = Header(None)):
     """
-    Solo permitido para Vendedor o Administrador.
-    Valida stock y lo descuenta automáticamente del inventario.
+    Registra la venta en Supabase y resta el stock en la tabla productos.
+    Requiere rol vendedor o administrador.
     """
     if x_user_role not in ["vendedor", "administrador"]:
-        raise HTTPException(status_code=403, detail="Debes identificarte como Vendedor o Administrador para despachar pedidos")
+        raise HTTPException(status_code=403, detail="Debes identificarte como Vendedor o Administrador para registrar ventas")
 
-    # 1. Validar stock
+    if not pedido.items:
+        raise HTTPException(status_code=400, detail="El pedido no contiene licores")
+
+    # 1. Validar existencias actuales en Supabase
+    productos_en_db = {}
     for item in pedido.items:
-        prod = next((p for p in PRODUCTOS_DEMO if p["id"] == item.producto_id), None)
-        if not prod:
-            raise HTTPException(status_code=400, detail=f"El producto con ID {item.producto_id} no existe")
+        res = supabase_db(f"productos?id=eq.{item.producto_id}&select=id,nombre,stock,precio", method="GET")
+        if not res:
+            raise HTTPException(status_code=404, detail=f"El licor {item.producto_nombre} no existe en la bodega")
+        prod = res[0]
         if prod["stock"] < item.cantidad:
-            raise HTTPException(status_code=400, detail=f"Stock insuficiente para '{prod['nombre']}'. Disponible: {prod['stock']}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stock insuficiente para '{prod['nombre']}'. Disponible en bodega: {prod['stock']}, solicitado: {item.cantidad}"
+            )
+        productos_en_db[item.producto_id] = prod
 
-    # 2. Descontar stock (Venta realizada)
+    # 2. Descontar stock en Supabase para cada licor
     for item in pedido.items:
-        for prod in PRODUCTOS_DEMO:
-            if prod["id"] == item.producto_id:
-                prod["stock"] -= item.cantidad
+        nuevo_stock = productos_en_db[item.producto_id]["stock"] - item.cantidad
+        supabase_db(f"productos?id=eq.{item.producto_id}", method="PATCH", data={"stock": nuevo_stock})
 
-    nuevo_id = len(PEDIDOS_DEMO) + 1
-    registro = pedido.model_dump()
-    registro["id"] = nuevo_id
-    registro["estado"] = "despachado"
-    PEDIDOS_DEMO.append(registro)
+    # 3. Registrar venta en tabla 'pedidos'
+    pedido_data = {
+        "cliente_nombre": pedido.cliente_nombre,
+        "cliente_telefono": pedido.cliente_telefono,
+        "cliente_direccion": pedido.cliente_direccion,
+        "total": pedido.total,
+        "vendedor_username": x_user_role,
+        "estado": "despachado"
+    }
+    nuevo_pedido = supabase_db("pedidos", method="POST", data=pedido_data)
+    pedido_id = nuevo_pedido[0]["id"] if nuevo_pedido else None
 
-    return {"mensaje": "¡Venta registrada y stock descontado con éxito!", "pedido_id": nuevo_id, "total": pedido.total}
+    # 4. Registrar detalle en tabla 'detalle_pedidos'
+    if pedido_id:
+        for item in pedido.items:
+            detalle = {
+                "pedido_id": pedido_id,
+                "producto_id": item.producto_id,
+                "producto_nombre": item.producto_nombre,
+                "cantidad": item.cantidad,
+                "precio_unitario": item.precio_unitario,
+                "subtotal": item.cantidad * item.precio_unitario
+            }
+            supabase_db("detalle_pedidos", method="POST", data=detalle)
 
-# ----------------- CREAR LICOR (POST: Solo Administrador) -----------------
+    return {
+        "mensaje": "¡Venta registrada y stock descontado directamente en Supabase!",
+        "pedido_id": pedido_id,
+        "total": pedido.total
+    }
+
+# ----------------- CREAR PRODUCTO (POST: Inserta en Supabase) -----------------
 @app.post("/api/products", status_code=status.HTTP_201_CREATED)
 def crear_producto(producto: ProductoBase, x_user_role: Optional[str] = Header(None)):
+    """Solo Administrador: Inserta un licor en la tabla 'productos'."""
     if x_user_role != "administrador":
-        raise HTTPException(status_code=403, detail="Permiso denegado: Solo el Administrador puede ingresar nuevos licores")
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo el Administrador puede ingresar licores")
 
-    nuevo_dict = producto.model_dump()
-    nuevo_id = max([p["id"] for p in PRODUCTOS_DEMO], default=0) + 1
-    nuevo_dict["id"] = nuevo_id
-    PRODUCTOS_DEMO.append(nuevo_dict)
-    return {"mensaje": "Licor creado con éxito por el Administrador", "producto": nuevo_dict}
+    nuevo = supabase_db("productos", method="POST", data=producto.model_dump())
+    return {"mensaje": "Licor creado en Supabase con éxito", "producto": nuevo[0]}
 
-# ----------------- ACTUALIZAR LICOR (PUT: Solo Administrador) -----------------
+# ----------------- ACTUALIZAR PRODUCTO (PUT: Modifica en Supabase) -----------------
 @app.put("/api/products/{producto_id}")
 def actualizar_producto(producto_id: int, datos: ProductoUpdate, x_user_role: Optional[str] = Header(None)):
+    """Solo Administrador: Actualiza en la tabla 'productos'."""
     if x_user_role != "administrador":
-        raise HTTPException(status_code=403, detail="Permiso denegado: Solo el Administrador puede modificar inventario")
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo el Administrador puede modificar inventario")
 
     actualizaciones = {k: v for k, v in datos.model_dump().items() if v is not None}
-    for p in PRODUCTOS_DEMO:
-        if p["id"] == producto_id:
-            p.update(actualizaciones)
-            return {"mensaje": "Licor actualizado por Administrador", "producto": p}
-    raise HTTPException(status_code=404, detail="Licor no encontrado")
+    if not actualizaciones:
+        raise HTTPException(status_code=400, detail="No se enviaron datos para actualizar")
 
-# ----------------- ELIMINAR LICOR (DELETE: Solo Administrador) -----------------
+    actualizado = supabase_db(f"productos?id=eq.{producto_id}", method="PATCH", data=actualizaciones)
+    if not actualizado:
+        raise HTTPException(status_code=404, detail="Licor no encontrado en Supabase")
+    return {"mensaje": "Licor actualizado en Supabase", "producto": actualizado[0]}
+
+# ----------------- ELIMINAR PRODUCTO (DELETE: Borra de Supabase) -----------------
 @app.delete("/api/products/{producto_id}")
 def eliminar_producto(producto_id: int, x_user_role: Optional[str] = Header(None)):
+    """Solo Administrador: Elimina de la tabla 'productos'."""
     if x_user_role != "administrador":
-        raise HTTPException(status_code=403, detail="Permiso denegado: Solo el Administrador puede eliminar referencias")
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo el Administrador puede eliminar referencias")
 
-    global PRODUCTOS_DEMO
-    ini_len = len(PRODUCTOS_DEMO)
-    PRODUCTOS_DEMO = [p for p in PRODUCTOS_DEMO if p["id"] != producto_id]
-    if len(PRODUCTOS_DEMO) < ini_len:
-        return {"mensaje": f"Licor {producto_id} eliminado exitosamente"}
-    raise HTTPException(status_code=404, detail="Licor no encontrado")
+    supabase_db(f"productos?id=eq.{producto_id}", method="DELETE")
+    return {"mensaje": f"Licor con ID {producto_id} eliminado definitivamente de Supabase"}

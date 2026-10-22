@@ -1,129 +1,66 @@
 # ==============================================================
-# SERVIDOR LOCAL DE DESARROLLO - LICORERA DONDE JEFER
+# SERVIDOR LOCAL DE DESARROLLO - LICORERA DONDE JEFER (100% SUPABASE)
 # ==============================================================
-# Incluye Autenticacion con Roles (RBAC):
-# - Administrador (Jefer): Control total (vender + editar/borrar/crear licores)
-# - Vendedor (Carlos): Solo vender (adiciona pedidos y resta stock)
+# Este servidor lee directamente desde la base de datos de Supabase.
+# Cero listas quemadas en memoria: todo vive en la nube.
 # ==============================================================
 
 import os
 import json
 import urllib.parse
+import urllib.request
+import urllib.error
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 PORT = 8000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
+ENV_FILE = os.path.join(BASE_DIR, ".env")
 
-# Usuarios preconfigurados en memoria para pruebas
-USUARIOS = {
-    "jefer": {
-        "username": "jefer",
-        "password": "admin123",
-        "nombre": "Jefer (Administrador)",
-        "rol": "administrador"
-    },
-    "vendedor": {
-        "username": "vendedor",
-        "password": "vendedor123",
-        "nombre": "Carlos (Vendedor)",
-        "rol": "vendedor"
+# 1. Cargar credenciales desde .env
+SUPABASE_URL = ""
+SUPABASE_KEY = ""
+
+if os.path.exists(ENV_FILE):
+    with open(ENV_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                if k.strip() == "SUPABASE_URL":
+                    SUPABASE_URL = v.strip().rstrip("/")
+                elif k.strip() in ["SUPABASE_KEY", "SUPABASE_ANON_KEY"]:
+                    SUPABASE_KEY = v.strip()
+
+# Helper para comunicarse con Supabase
+def call_supabase(endpoint, method="GET", data=None, headers_extra=None):
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"error": "Credenciales de Supabase no configuradas en .env"}, 500
+
+    url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
     }
-}
+    if headers_extra:
+        headers.update(headers_extra)
 
-# Catalogo inicial con stock real en memoria
-PRODUCTOS = [
-    {
-        "id": 1,
-        "nombre": "Aguardiente Antioqueño Tapa Azul (Sin Azúcar)",
-        "categoria": "Aguardiente",
-        "precio": 48000,
-        "stock": 35,
-        "imagen_url": "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500&auto=format&fit=crop",
-        "descripcion": "El clasico paisa sin azucar, suave al paladar y perfecto pal tinto o el remate.",
-        "grado_alcohol": 29.0,
-        "volumen": "750 ml"
-    },
-    {
-        "id": 2,
-        "nombre": "Aguardiente Antioqueño Tapa Roja (Tradicional)",
-        "categoria": "Aguardiente",
-        "precio": 46000,
-        "stock": 28,
-        "imagen_url": "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500&auto=format&fit=crop",
-        "descripcion": "El tradicional anisado paisa con cuerpo y sabor inconfundible de fiesta.",
-        "grado_alcohol": 29.0,
-        "volumen": "750 ml"
-    },
-    {
-        "id": 3,
-        "nombre": "Ron Medellín Extra Añejo 8 Años",
-        "categoria": "Ron",
-        "precio": 78000,
-        "stock": 20,
-        "imagen_url": "https://images.unsplash.com/photo-1608885823108-25b4458d9297?w=500&auto=format&fit=crop",
-        "descripcion": "Madurado pacientemente en barricas de roble americano, sabor suave a caramelo.",
-        "grado_alcohol": 35.0,
-        "volumen": "750 ml"
-    },
-    {
-        "id": 4,
-        "nombre": "Whisky Buchanan's DeLuxe 12 Años",
-        "categoria": "Whisky",
-        "precio": 145000,
-        "stock": 25,
-        "imagen_url": "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=500&auto=format&fit=crop",
-        "descripcion": "Blended Scotch Whisky suave, con notas citricas y toques sutiles de turba.",
-        "grado_alcohol": 40.0,
-        "volumen": "750 ml"
-    },
-    {
-        "id": 5,
-        "nombre": "Whisky Old Parr 12 Años",
-        "categoria": "Whisky",
-        "precio": 155000,
-        "stock": 18,
-        "imagen_url": "https://images.unsplash.com/photo-1569529465841-dfecdab7503b?w=500&auto=format&fit=crop",
-        "descripcion": "La legendaria botella craquelada. Rico, afrutado y aterciopelado.",
-        "grado_alcohol": 40.0,
-        "volumen": "750 ml"
-    },
-    {
-        "id": 6,
-        "nombre": "Six Pack Cerveza Club Colombia Dorada",
-        "categoria": "Cervezas",
-        "precio": 28000,
-        "stock": 50,
-        "imagen_url": "https://images.unsplash.com/photo-1608270546114-1f6305a2e584?w=500&auto=format&fit=crop",
-        "descripcion": "Cerveza tipo lager dorada brillante, con notas sutiles de lupulo y cebada.",
-        "grado_alcohol": 4.7,
-        "volumen": "Six Pack 330ml"
-    },
-    {
-        "id": 7,
-        "nombre": "Six Pack Cerveza Corona Extra",
-        "categoria": "Cervezas",
-        "precio": 36000,
-        "stock": 40,
-        "imagen_url": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&auto=format&fit=crop",
-        "descripcion": "Cerveza clara mexicana para tomar bien helada con una rodaja de limon.",
-        "grado_alcohol": 4.5,
-        "volumen": "Six Pack 355ml"
-    },
-    {
-        "id": 8,
-        "nombre": "Tequila Don Julio Blanco",
-        "categoria": "Tequila",
-        "precio": 260000,
-        "stock": 12,
-        "imagen_url": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500&auto=format&fit=crop",
-        "descripcion": "100% Agave Azul de Jalisco, con sabor limpio a citricos y notas de pimienta.",
-        "grado_alcohol": 38.0,
-        "volumen": "750 ml"
-    }
-]
+    req_data = json.dumps(data).encode("utf-8") if data is not None else None
+    req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
 
-PEDIDOS = []
+    try:
+        with urllib.request.urlopen(req) as resp:
+            body = resp.read().decode("utf-8")
+            return (json.loads(body) if body else []), resp.status
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8")
+        print(f"[Supabase Error {e.code}]: {err_msg}")
+        return {"error": err_msg}, e.code
+    except Exception as e:
+        print(f"[Supabase Conn Error]: {e}")
+        return {"error": str(e)}, 500
 
 class LicoreraHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -147,35 +84,41 @@ class LicoreraHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        
-        # Endpoint de salud
+
         if parsed.path == "/api/health":
             return self._responder_json({
                 "status": "online",
                 "negocio": "Licorera Donde Jefer",
-                "mensaje": "Servicio local activo con control de roles",
-                "supabase_conectado": False
+                "fuente_datos": "100% Supabase Cloud",
+                "supabase_url": SUPABASE_URL
             })
 
-        # Endpoint GET /api/products
+        # GET /api/products -> Consulta en Supabase
         if parsed.path == "/api/products":
             params = urllib.parse.parse_qs(parsed.query)
             cat = params.get("categoria", [None])[0]
             q = params.get("q", [None])[0]
 
-            resultado = PRODUCTOS
+            query_parts = ["order=id.asc"]
             if cat and cat.lower() != "todos":
-                resultado = [p for p in resultado if p["categoria"].lower() == cat.lower()]
+                query_parts.append(f"categoria=eq.{urllib.parse.quote(cat)}")
             if q:
-                resultado = [p for p in resultado if q.lower() in p["nombre"].lower()]
+                query_parts.append(f"nombre=ilike.*{urllib.parse.quote(q)}*")
 
-            return self._responder_json({"origen": "local_python", "data": resultado})
+            endpoint = "productos?select=*"
+            if query_parts:
+                endpoint += "&" + "&".join(query_parts)
 
-        # Endpoint GET /api/orders
+            res, status_code = call_supabase(endpoint, method="GET")
+            if status_code >= 400:
+                return self._responder_json(res, status_code)
+            return self._responder_json({"origen": "supabase_database", "data": res})
+
+        # GET /api/orders -> Consulta en Supabase
         if parsed.path == "/api/orders":
-            return self._responder_json(PEDIDOS)
+            res, status_code = call_supabase("pedidos?select=*,detalle_pedidos(*)", method="GET")
+            return self._responder_json(res, status_code)
 
-        # Si no es una ruta /api, sirve los archivos estaticos de public/
         return super().do_GET()
 
     def do_POST(self):
@@ -184,136 +127,148 @@ class LicoreraHandler(SimpleHTTPRequestHandler):
         body = self.rfile.read(content_len).decode("utf-8")
         payload = json.loads(body) if body else {}
 
-        # ----------------- LOGIN (AUTENTICACIÓN) -----------------
+        # ----------------- LOGIN (Valida en tabla 'usuarios' de Supabase) -----------------
         if parsed.path == "/api/auth/login":
             user = payload.get("username", "").strip().lower()
             password = payload.get("password", "").strip()
 
-            if user in USUARIOS and USUARIOS[user]["password"] == password:
-                u_info = USUARIOS[user]
+            endpoint = f"usuarios?username=eq.{urllib.parse.quote(user)}&password_hash=eq.{urllib.parse.quote(password)}&select=id,username,nombre_completo,rol,activo"
+            res, status_code = call_supabase(endpoint, method="GET")
+
+            if status_code == 200 and isinstance(res, list) and len(res) > 0:
+                u = res[0]
+                if not u.get("activo", True):
+                    return self._responder_json({"error": "Usuario inactivo"}, 403)
                 return self._responder_json({
-                    "mensaje": f"Bienvenido a la barra, {u_info['nombre']}!",
+                    "mensaje": f"Bienvenido, {u['nombre_completo']}!",
                     "usuario": {
-                        "username": u_info["username"],
-                        "nombre": u_info["nombre"],
-                        "rol": u_info["rol"]
+                        "username": u["username"],
+                        "nombre": u["nombre_completo"],
+                        "rol": u["rol"]
                     }
                 })
-            return self._responder_json({"error": "Usuario o contrasena incorrectos"}, 401)
+            return self._responder_json({"error": "Usuario o contrasena incorrectos en Supabase"}, 401)
 
-        # ----------------- CREAR PRODUCTO (SOLO ADMIN) -----------------
-        if parsed.path == "/api/products":
-            rol_solicitante = self.headers.get("X-User-Role") or payload.get("rol_solicitante")
-            if rol_solicitante != "administrador":
-                return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede ingresar referencias"}, 403)
-
-            nuevo_id = max([p["id"] for p in PRODUCTOS], default=0) + 1
-            payload["id"] = nuevo_id
-            payload.pop("rol_solicitante", None)
-            PRODUCTOS.append(payload)
-            return self._responder_json({"mensaje": "Licor creado con exito", "producto": payload}, 201)
-
-        # ----------------- REGISTRAR VENTA / PEDIDO (VENDEDOR O ADMIN) -----------------
+        # ----------------- REGISTRAR VENTA (Resta stock en Supabase) -----------------
         if parsed.path == "/api/orders":
             rol_solicitante = self.headers.get("X-User-Role") or payload.get("rol_solicitante")
             if rol_solicitante not in ["vendedor", "administrador"]:
-                return self._responder_json({"error": "Debes iniciar sesion como Vendedor o Administrador para despachar pedidos"}, 401)
+                return self._responder_json({"error": "Debes identificarte como Vendedor o Administrador para registrar ventas"}, 403)
 
             items = payload.get("items", [])
             if not items:
                 return self._responder_json({"error": "El pedido no contiene licores"}, 400)
 
-            # 1. Validar que haya stock suficiente para cada licor
+            # 1. Validar y descontar stock directamente en Supabase
             for item in items:
                 p_id = item["producto_id"]
                 cant = item["cantidad"]
-                licor = next((p for p in PRODUCTOS if p["id"] == p_id), None)
-                if not licor:
-                    return self._responder_json({"error": f"El licor {item.get('producto_nombre', p_id)} no existe"}, 400)
-                if licor["stock"] < cant:
+                # Consultar stock actual
+                prod_res, s_code = call_supabase(f"productos?id=eq.{p_id}&select=id,nombre,stock", method="GET")
+                if not prod_res or s_code != 200:
+                    return self._responder_json({"error": f"El licor {item.get('producto_nombre', p_id)} no existe en Supabase"}, 404)
+                prod = prod_res[0]
+                if prod["stock"] < cant:
                     return self._responder_json({
-                        "error": f"Stock insuficiente para '{licor['nombre']}'. Disponible: {licor['stock']}, solicitado: {cant}"
+                        "error": f"Stock insuficiente en bodega para '{prod['nombre']}'. Disponible: {prod['stock']}, pedido: {cant}"
                     }, 400)
 
-            # 2. Descontar del inventario (Stock = Stock - Cantidad)
-            for item in items:
-                p_id = item["producto_id"]
-                cant = item["cantidad"]
-                for p in PRODUCTOS:
-                    if p["id"] == p_id:
-                        p["stock"] -= cant
-                        print(f">> [VENTA]: Descontadas {cant} unidades de '{p['nombre']}'. Stock restante: {p['stock']}")
+                # Descontar stock en Supabase
+                nuevo_stock = prod["stock"] - cant
+                call_supabase(f"productos?id=eq.{p_id}", method="PATCH", data={"stock": nuevo_stock})
+                print(f">> [SUPABASE VENTA]: Stock de '{prod['nombre']}' actualizado a {nuevo_stock}")
 
-            nuevo_id = len(PEDIDOS) + 1
-            payload["id"] = nuevo_id
-            payload["estado"] = "despachado"
-            payload.pop("rol_solicitante", None)
-            PEDIDOS.append(payload)
+            # 2. Guardar pedido en Supabase
+            pedido_data = {
+                "cliente_nombre": payload.get("cliente_nombre"),
+                "cliente_telefono": payload.get("cliente_telefono"),
+                "cliente_direccion": payload.get("cliente_direccion"),
+                "total": payload.get("total"),
+                "vendedor_username": rol_solicitante,
+                "estado": "despachado"
+            }
+            res_ped, s_code = call_supabase("pedidos", method="POST", data=pedido_data)
+            pedido_id = res_ped[0]["id"] if res_ped else None
+
+            # 3. Guardar detalle de pedido en Supabase
+            if pedido_id:
+                for item in items:
+                    det = {
+                        "pedido_id": pedido_id,
+                        "producto_id": item["producto_id"],
+                        "producto_nombre": item["producto_nombre"],
+                        "cantidad": item["cantidad"],
+                        "precio_unitario": item["precio_unitario"],
+                        "subtotal": item["cantidad"] * item["precio_unitario"]
+                    }
+                    call_supabase("detalle_pedidos", method="POST", data=det)
 
             return self._responder_json({
-                "mensaje": "¡Venta registrada y stock actualizado con exito!",
-                "pedido_id": nuevo_id,
+                "mensaje": "¡Venta registrada y stock descontado con exito en Supabase!",
+                "pedido_id": pedido_id,
                 "total": payload.get("total")
             }, 201)
+
+        # ----------------- CREAR PRODUCTO (Solo Administrador en Supabase) -----------------
+        if parsed.path == "/api/products":
+            rol_solicitante = self.headers.get("X-User-Role") or payload.get("rol_solicitante")
+            if rol_solicitante != "administrador":
+                return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede ingresar licores"}, 403)
+
+            payload.pop("rol_solicitante", None)
+            res, status_code = call_supabase("productos", method="POST", data=payload)
+            return self._responder_json({"mensaje": "Licor creado en Supabase", "producto": res}, 201)
 
         self._responder_json({"error": "Ruta no encontrada"}, 404)
 
     def do_PUT(self):
-        # ----------------- EDITAR PRODUCTO (SOLO ADMIN) -----------------
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path.startswith("/api/products/"):
             try:
+                rol_solicitante = self.headers.get("X-User-Role")
+                if rol_solicitante != "administrador":
+                    return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede modificar inventario"}, 403)
+
+                prod_id = int(parsed.path.split("/")[-1])
                 content_len = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(content_len).decode("utf-8")
                 datos = json.loads(body) if body else {}
-
-                rol_solicitante = self.headers.get("X-User-Role") or datos.get("rol_solicitante")
-                if rol_solicitante != "administrador":
-                    return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede editar el inventario"}, 403)
-
-                prod_id = int(parsed.path.split("/")[-1])
                 datos.pop("rol_solicitante", None)
 
-                for p in PRODUCTOS:
-                    if p["id"] == prod_id:
-                        p.update(datos)
-                        return self._responder_json({"mensaje": "Licor actualizado en inventario", "producto": p})
+                res, status_code = call_supabase(f"productos?id=eq.{prod_id}", method="PATCH", data=datos)
+                return self._responder_json({"mensaje": "Licor actualizado en Supabase", "producto": res})
             except Exception as e:
                 return self._responder_json({"error": str(e)}, 400)
 
         self._responder_json({"error": "No encontrado"}, 404)
 
     def do_DELETE(self):
-        # ----------------- BORRAR PRODUCTO (SOLO ADMIN) -----------------
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path.startswith("/api/products/"):
             try:
                 rol_solicitante = self.headers.get("X-User-Role")
                 if rol_solicitante != "administrador":
-                    return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede eliminar licores"}, 403)
+                    return self._responder_json({"error": "Acceso denegado: Solo el Administrador puede eliminar referencias"}, 403)
 
                 prod_id = int(parsed.path.split("/")[-1])
-                global PRODUCTOS
-                ini_len = len(PRODUCTOS)
-                PRODUCTOS = [p for p in PRODUCTOS if p["id"] != prod_id]
-                if len(PRODUCTOS) < ini_len:
-                    return self._responder_json({"mensaje": f"Licor con ID {prod_id} eliminado exitosamente"})
+                res, status_code = call_supabase(f"productos?id=eq.{prod_id}", method="DELETE")
+                return self._responder_json({"mensaje": f"Licor {prod_id} eliminado de Supabase"})
             except Exception as e:
                 return self._responder_json({"error": str(e)}, 400)
 
         self._responder_json({"error": "No encontrado"}, 404)
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), LicoreraHandler)
     print("=" * 65)
-    print(">> LICORERA DONDE JEFER - SERVIDOR ACTIVO CON CONTROL DE ROLES <<")
-    print(f">> Entra en tu navegador a: http://localhost:{PORT}")
-    print(">> Credenciales de prueba:")
+    print(">> LICORERA DONDE JEFER - 100% CONECTADO A SUPABASE <<")
+    print(f">> Base de Datos: {SUPABASE_URL}")
+    print(f">> Servidor Local: http://localhost:{PORT}")
+    print(">> Usuarios reales en Supabase:")
     print("   - Administrador: jefer / admin123")
     print("   - Vendedor:      vendedor / vendedor123")
-    print("Presiona Ctrl + C en la terminal para apagar el servidor.")
     print("=" * 65)
+    server = HTTPServer(("0.0.0.0", PORT), LicoreraHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[!] Servidor detenido. Hasta la proxima, Jefer!")
+        print("\n[!] Servidor detenido.")
